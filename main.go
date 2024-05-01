@@ -10,8 +10,7 @@ import (
 
 // API endpoints
 var (
-	artistsEndpoint   = "https://groupietrackers.herokuapp.com/api/artists"
-	locationsEndpoint = "https://groupietrackers.herokuapp.com/api/locations"
+	artistsEndpoint = "https://groupietrackers.herokuapp.com/api/artists"
 )
 
 // Structs to unmarshal API responses
@@ -32,12 +31,17 @@ type Relation struct {
 	DatesLocations map[string][]string `json:"datesLocations"`
 }
 
+type Error struct {
+	ErrorNum int
+	ErrorMsg string
+}
+
 // Handler function to fetch artists data
 func homePage(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" && r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
+	// if r.Method == "GET" && r.URL.Path != "/" {
+	// 	http.NotFound(w, r)
+	// 	return
+	// }
 	var artistsData []Artist
 	// Make GET request to artists API endpoint
 	resp, err := http.Get(artistsEndpoint)
@@ -55,9 +59,14 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl, err := template.ParseFiles("template/index.html")
 	if err != nil {
-		http.Error(w, "Failed to parse file index.html", http.StatusInternalServerError)
+		ErrorHandler(w, r, http.StatusInternalServerError)
 		return
 	}
+	if r.URL.Path != "/" {
+		ErrorHandler(w, r, http.StatusNotFound)
+		return
+	}
+
 	err = tmpl.Execute(w, artistsData)
 	if err != nil {
 		http.Error(w, "Failed to execute file index.html", http.StatusInternalServerError)
@@ -66,10 +75,10 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func relationPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" && r.URL.Path != "/relation" {
-		http.NotFound(w, r)
-		return
-	}
+	// if r.Method == "GET" && r.URL.Path != "/relation" {
+	// 	http.NotFound(w, r)
+	// 	return
+	// }
 	relationsEndpoint := r.FormValue("relationlink")
 	fmt.Println(relationsEndpoint)
 	var relationData Relation
@@ -88,8 +97,11 @@ func relationPage(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl, err := template.ParseFiles("template/relation.html")
 	if err != nil {
-		http.Error(w, "Failed to parse file relation.html", http.StatusInternalServerError)
+		ErrorHandler(w, r, http.StatusInternalServerError)
 		return
+	}
+	if r.URL.Path != "/relation" {
+		ErrorHandler(w, r, http.StatusNotFound)
 	}
 	err = tmpl.Execute(w, relationData)
 	if err != nil {
@@ -98,7 +110,31 @@ func relationPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func ErrorHandler(w http.ResponseWriter, r *http.Request, err int) {
+	temp, errorCode := template.ParseFiles("template/error.html")
+	if errorCode != nil {
+		log.Fatal(errorCode)
+		return
+	}
+	w.WriteHeader(err)
+	errorData := Error{ErrorNum: err}
+
+	if err == 404 {
+		errorData.ErrorMsg = "Page Not Found"
+
+	} else if err == 500 {
+		errorData.ErrorMsg = "Internal Server Error"
+	} else if err == 400 {
+		errorData.ErrorMsg = "Bad Request"
+	}
+	temp.Execute(w, errorData)
+
+}
+
 func main() {
+	styles := http.FileServer(http.Dir("./static/"))
+	http.Handle("/static/", http.StripPrefix("/static/", styles))
+
 	// Define HTTP routes
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/relation", relationPage)
